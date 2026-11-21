@@ -1,0 +1,516 @@
+/* Quiet surfaces for the research, conversation, and connection screens. */
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) {
+  --companion-cream: #f2eee6;
+  --companion-control: #938879;
+  --companion-alert: #803c2d;
+  --companion-wash: #eee8de;
+  --companion-alert-surface: #f5e9e1;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+:is(#employee-workspace, #xhs-workspace) {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(24px, 3.3vw, 52px);
+  background: var(--paper);
+}
+
+:is(#employee-workspace, #xhs-workspace) .topbar {
+  gap: 24px;
+  padding-bottom: 23px;
+  border-color: var(--rule);
+}
+
+:is(#employee-workspace, #xhs-workspace) h1,
+:is(#model-dialog, #deepseek-dialog) h2 {
+  color: var(--walnut);
+  font-family: var(--sans);
+  font-weight: 650;
+  line-height: 1.22;
+}
+
+:is(#employee-workspace, #xhs-workspace) h1 {
+  font-size: clamp(27px, 2.8vw, 39px);
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) :is(.eyebrow, .step-label) {
+  color: var(--copper);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1.5;
+}
+
+:is(#employee-workspace, #xhs-workspace) :is(.panel, .chat-panel, .post-card, .status-pill) {
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+:is(#employee-workspace, #xhs-workspace) :is(.panel, .post-card) {
+  padding: clamp(16px, 2vw, 24px);
+}
+
+:is(#employee-workspace, #xhs-workspace) :is(.panel-title, .section-heading h2, .results-heading h2) {
+  color: var(--walnut);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+#employee-workspace .status-pill {
+  max-width: min(325px, 36%);
+  align-self: center;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+#employee-workspace .main-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 285px);
+  align-items: start;
+  gap: clamp(16px, 2vw, 24px);
+  padding-top: 24px;
+}
+
+#employee-workspace .chat-panel {
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 530px;
+}
+
+#employee-workspace .side .panel {
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+}
+
+#employee-workspace .chat-log {
+  max-height: min(570px, 67vh);
+  min-width: 0;
+  padding: clamp(16px, 2vw, 26px);
+}
+
+#employee-workspace .msg {
+  max-width: min(94%, 72ch);
+  padding: 11px 15px;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+#employee-workspace .msg.user {
+  color: var(--walnut);
+  background: var(--companion-wash);
+}
+
+#employee-workspace .msg.assistant {
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+}
+
+#employee-workspace .composer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 14px;
+  border-color: var(--rule);
+}
+
+#employee-workspace .composer button {
+  min-width: 74px;
+  align-self: end;
+}
+
+#employee-workspace .num-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) :is(input, select, textarea) {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--companion-control);
+  border-radius: 5px;
+  color: var(--ink);
+  background: #fffefa;
+  font-size: 15px;
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  min-height: 0;
+  margin: 0 8px 0 0;
+  vertical-align: text-bottom;
+  accent-color: var(--oak);
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) button {
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--oak);
+  color: var(--surface);
+  font: 650 13px/1.4 var(--sans);
+  overflow-wrap: anywhere;
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) :is(.secondary-btn, .icon-btn) {
+  border-color: var(--rule);
+  color: var(--walnut);
+  background: transparent;
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) .danger-btn {
+  border-color: #ad7864;
+  color: var(--companion-alert);
+  background: transparent;
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) button:not(:disabled):hover {
+  background: var(--walnut);
+  color: var(--surface);
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) :is(.secondary-btn, .icon-btn):not(:disabled):hover {
+  border-color: var(--oak);
+  background: var(--companion-wash);
+  color: var(--walnut);
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) .danger-btn:not(:disabled):hover {
+  background: var(--companion-alert-surface);
+  color: var(--companion-alert);
+}
+
+:is(#employee-workspace, #xhs-workspace, #model-dialog, #deepseek-dialog) :is(button, a, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 2px;
+}
+
+#xhs-workspace .research-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 255px);
+  gap: clamp(16px, 2.2vw, 28px);
+  padding-top: 28px;
+}
+
+#xhs-workspace :is(.research-main, .research-side) {
+  min-width: 0;
+  gap: 22px;
+}
+
+#xhs-workspace .header-copy {
+  max-width: 54ch;
+}
+
+#xhs-workspace .section-heading h2 {
+  font-size: 19px;
+}
+
+#xhs-workspace .research-main > .panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 21px;
+  border-bottom: 1px solid var(--rule);
+  gap: 13px;
+}
+
+#xhs-workspace .research-main > .panel > p {
+  margin: 0;
+}
+
+#xhs-workspace .research-side .panel {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 0 0;
+}
+
+#xhs-workspace :is(.capability-row, .task-metrics span) {
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--companion-cream);
+  font-size: 13px;
+}
+
+#xhs-workspace .capability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 20px;
+  background: transparent;
+  padding: 0;
+}
+
+#xhs-workspace .research-form {
+  grid-template-columns: minmax(125px, 1fr) minmax(75px, 108px) auto;
+}
+
+#xhs-workspace progress {
+  accent-color: var(--oak);
+}
+
+#xhs-workspace .results-heading {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+#xhs-workspace .result-grid {
+  padding-top: 12px;
+}
+
+#xhs-workspace :is(.connection-badge, .post-state) {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+#xhs-workspace :is(.connection-badge.good, .post-state.success) {
+  color: #575040;
+  background: var(--companion-wash);
+}
+
+#xhs-workspace :is(.connection-badge.warn, .post-state.partial, .post-state.needs_login, .post-state.needs_verification) {
+  color: #794d32;
+  background: #f1e5d4;
+}
+
+#xhs-workspace :is(.connection-badge.bad, .post-state.failed, .post-state.platform_limited, .post-state.unavailable, .error-state, .error-copy, .diagnostic-card summary) {
+  color: var(--companion-alert);
+}
+
+#xhs-workspace :is(.connection-badge.bad, .post-state.failed, .post-state.platform_limited, .post-state.unavailable) {
+  background: var(--companion-alert-surface);
+}
+
+#xhs-workspace :is(.empty-state, .diagnostic-card) {
+  border-color: var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  line-height: 1.6;
+}
+
+#xhs-workspace .post-card {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  padding-inline: 0;
+}
+
+#xhs-workspace .error-state {
+  border-color: #ad7864;
+  background: var(--companion-alert-surface);
+}
+
+#xhs-workspace .post-head > div {
+  min-width: 0;
+}
+
+#xhs-workspace :is(.post-head h3, .post-meta, .copy-block p, .method-body) {
+  overflow-wrap: anywhere;
+}
+
+#xhs-workspace :is(.post-head h3, .copy-block p) {
+  color: var(--ink);
+}
+
+#xhs-workspace :is(.post-cover, .diagnostic-shot) {
+  border-color: var(--rule);
+  border-radius: 5px;
+}
+
+#xhs-workspace .post-cover {
+  object-fit: contain;
+  object-position: left top;
+  background: var(--paper);
+}
+
+#xhs-workspace :is(.post-metrics span, .tag) {
+  border-radius: 4px;
+  color: var(--walnut);
+  background: var(--companion-cream);
+}
+
+#xhs-workspace :is(.copy-block, .card-actions) {
+  border-color: var(--rule);
+}
+
+#xhs-workspace :is(.source-link, .method-details summary) {
+  color: var(--oak);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#xhs-workspace .task-list {
+  gap: 0;
+}
+
+#xhs-workspace .task-item {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+}
+
+#xhs-workspace .task-item.active,
+#xhs-workspace .task-item:not(:disabled):hover {
+  color: var(--walnut);
+  background: var(--companion-wash);
+}
+
+#xhs-workspace :is(.task-item small, .task-item span, .explain-card p, .method-details) {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+:is(#model-dialog, #deepseek-dialog) {
+  width: min(670px, calc(100% - 24px));
+  max-height: min(780px, calc(100dvh - 24px));
+  padding: clamp(18px, 3vw, 32px);
+  overflow: auto;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 16px 60px #28262024;
+}
+
+:is(#model-dialog, #deepseek-dialog)::backdrop {
+  background: #28262070;
+}
+
+:is(#model-dialog, #deepseek-dialog) .dialog-head {
+  gap: 12px;
+  padding-bottom: 6px;
+}
+
+:is(#model-dialog, #deepseek-dialog) h2 {
+  font-size: clamp(22px, 2.75vw, 29px);
+  overflow-wrap: anywhere;
+}
+
+:is(#model-dialog, #deepseek-dialog) .icon-btn {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-color: transparent;
+  font: 400 25px/1 var(--sans);
+}
+
+:is(#model-dialog, #deepseek-dialog) :is(.dialog-copy, .connection-help, .field-note, .connection-status p, .result-message) {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+:is(#model-dialog, #deepseek-dialog) :is(.proxy-fields, .connection-status) {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+:is(#model-dialog, #deepseek-dialog) .proxy-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 14px;
+  padding: 0;
+}
+
+:is(#model-dialog, #deepseek-dialog) .connection-status {
+  padding: 14px 0 0;
+  border-top: 1px solid var(--rule);
+}
+
+#deepseek-dialog .proxy-fields label:last-child {
+  grid-column: 1 / -1;
+}
+
+:is(#model-dialog, #deepseek-dialog) .connection-status > div {
+  gap: 10px 14px;
+  align-items: baseline;
+}
+
+:is(#model-dialog, #deepseek-dialog) .connection-status b {
+  min-width: 0;
+  color: var(--walnut);
+  overflow-wrap: anywhere;
+}
+
+:is(#model-dialog, #deepseek-dialog) .result-message.error {
+  color: var(--companion-alert);
+}
+
+@media (max-width: 1130px) {
+  #xhs-workspace .research-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #xhs-workspace .research-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  #employee-workspace .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #employee-workspace .status-pill {
+    max-width: 100%;
+  }
+
+  #employee-workspace .side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  :is(#employee-workspace, #xhs-workspace) {
+    padding: 20px 16px 34px;
+  }
+
+  :is(#employee-workspace, #xhs-workspace) .topbar {
+    gap: 13px;
+    min-height: 0;
+    padding-bottom: 18px;
+  }
+
+  :is(#employee-workspace, #xhs-workspace) h1 {
+    font-size: clamp(26px, 7.3vw, 33px);
+  }
+
+  #employee-workspace .chat-panel {
+    min-height: 430px;
+  }
+
+  #employee-workspace .side,
+  #xhs-workspace :is(.research-form, .research-side),
+  :is(#model-dialog, #deepseek-dialog) .proxy-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #xhs-workspace .post-head {
+    gap: 6px;
+  }
+
+  :is(#model-dialog, #deepseek-dialog) .connection-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

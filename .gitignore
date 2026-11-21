@@ -1,0 +1,10 @@
+data/
+data/xhs-browser-profile/
+data/xhs-artifacts/
+data/xhs-research.sqlite*
+.env
+.env.*
+!.env.example
+
+node_modules/
+.DS_Store

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>自媒体四员工工作台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/studio.css">
+    <link rel="stylesheet" href="/workspace-companions.css">
+    <link rel="stylesheet" href="/studio-usability.css">
+  </head>
+  <body>
+    <main class="app">
+      <aside class="rail" aria-label="工作台导航">
+        <div class="rail-head">
+          <a class="brand" href="/" aria-label="讲AI的西西 · 工作台首页">
+            <span class="mark" aria-hidden="true">西</span>
+            <div><strong>讲AI的西西</strong><small id="ai-state" class="model-indicator">检测中</small></div>
+          </a>
+          <button type="button" class="rail-toggle" id="rail-toggle" aria-controls="rail-content" aria-expanded="false">
+            <span>导航</span><i aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="rail-content" id="rail-content">
+          <nav id="employee-nav" aria-label="内容工作流"></nav>
+          <div class="rail-tools" role="group" aria-label="研究和连接工具">
+            <p class="rail-section-label">工具</p>
+            <button class="rail-tool" id="open-xhs-research" type="button">小红书内容研究</button>
+            <button class="rail-tool" id="open-legacy" type="button">员工对话记录</button>
+            <button class="rail-tool" id="open-model-settings" type="button">本机模型设置</button>
+            <button class="rail-tool" id="open-deepseek" type="button">DeepSeek 官方 API</button>
+          </div>
+          <details class="rail-library">
+            <summary>共享资料</summary>
+            <div class="metric"><span>资料</span><b id="k-count">0</b></div>
+            <div class="metric"><span>发布数据</span><b id="f-count">0</b></div>
+            <a class="ghost-link" href="/api/export" target="_blank">导出 Markdown</a>
+          </details>
+        </div>
+      </aside>
+
+      <section class="workspace studio" id="studio-workspace" aria-label="内容工作台"></section>
+      <section class="workspace" id="employee-workspace" hidden>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">研究 → 文案 → 剪辑 → 数据回流</p>
+            <h1 id="employee-name">热点与竞品研究员</h1>
+          </div>
+          <div class="status-pill" id="employee-skills"></div>
+        </header>
+
+        <section class="main-grid">
+          <div class="chat-panel">
+            <div class="chat-log" id="chat-log"></div>
+            <form class="composer" id="composer">
+              <textarea id="message" rows="3" placeholder="把你的想法、素材、账号问题或今天要做的内容发给当前员工"></textarea>
+              <button type="submit">发送</button>
+            </form>
+          </div>
+
+          <aside class="side">
+            <section class="panel">
+              <div class="panel-title">喂资料</div>
+              <select id="k-type">
+                <option>身份资料</option>
+                <option>业务资料</option>
+                <option>过往内容</option>
+                <option>客户异议</option>
+                <option>今日素材</option>
+              </select>
+              <input id="k-title" placeholder="资料标题" />
+              <textarea id="k-content" rows="5" placeholder="粘贴真实资料。每次员工回答都会优先读取这些内容。"></textarea>
+              <button id="save-knowledge">存入知识库</button>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">回填数据</div>
+              <input id="fb-title" placeholder="内容标题/选题" />
+              <input id="fb-platform" placeholder="平台，如 视频号/小红书/抖音" />
+              <div class="num-row">
+                <input id="fb-views" type="number" min="0" placeholder="播放" />
+                <input id="fb-leads" type="number" min="0" placeholder="加微" />
+                <input id="fb-deals" type="number" min="0" placeholder="成交" />
+              </div>
+              <button id="save-feedback">回填到数据飞轮</button>
+            </section>
+          </aside>
+        </section>
+      </section>
+
+      <section class="workspace research-workspace" id="xhs-workspace" hidden>
+        <header class="topbar research-header">
+          <div>
+            <p class="eyebrow">真实页面采集 · 本机保存</p>
+            <h1>小红书内容研究</h1>
+            <p class="header-copy">在你登录的小红书专用浏览器里搜索关键词，逐条读取可见原文、指标、图片文字和字幕。</p>
+          </div>
+          <button class="secondary-btn" id="back-to-employees" type="button">返回员工工作台</button>
+        </header>
+
+        <div class="research-layout">
+          <div class="research-main">
+            <section class="panel connection-card">
+              <div class="section-heading">
+                <div>
+                  <p class="step-label">第一步</p>
+                  <h2>连接小红书</h2>
+                </div>
+                <span class="connection-badge" id="xhs-connection-badge">检测中</span>
+              </div>
+              <p id="xhs-connection-message" class="muted-copy">正在读取专用登录状态。</p>
+              <div class="capability-row">
+                <span id="xhs-ocr-capability">OCR 检测中</span>
+                <span id="xhs-asr-capability">ASR 检测中</span>
+              </div>
+              <div class="button-row">
+                <button id="xhs-open-login" type="button">打开登录浏览器</button>
+                <button class="secondary-btn" id="xhs-check-login" type="button">检查登录状态</button>
+                <button class="danger-btn" id="xhs-clear-login" type="button">清除专用登录</button>
+              </div>
+              <p class="privacy-note">登录信息只保存在这个工作台的专用 Chrome 目录中。工作台不读取、导出或展示 Cookie、Token 和密码；遇到验证码时需要你在浏览器中亲自完成。</p>
+            </section>
+
+            <section class="panel search-card">
+              <div class="section-heading">
+                <div>
+                  <p class="step-label">第二步</p>
+                  <h2>搜索与提取</h2>
+                </div>
+              </div>
+              <form id="xhs-search-form" class="research-form">
+                <label>
+                  搜索主题
+                  <input id="xhs-keyword" maxlength="100" placeholder="例如：大学生 AI 副业" required />
+                </label>
+                <label class="count-field">
+                  目标帖子数
+                  <input id="xhs-target" type="number" min="1" max="20" value="10" required />
+                </label>
+                <button type="submit">开始自动搜索</button>
+              </form>
+              <p class="field-note">每次最多 20 条，单任务按顺序逐条打开，有限滚动和有限重试，避免给平台造成高频请求。</p>
+            </section>
+
+            <section class="panel progress-card" id="xhs-progress-card" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="step-label">任务进度</p>
+                  <h2 id="xhs-progress-title">正在准备</h2>
+                </div>
+                <button class="danger-btn small-btn" id="xhs-stop-task" type="button">停止任务</button>
+              </div>
+              <progress id="xhs-progress" value="0" max="1"></progress>
+              <p id="xhs-progress-message" class="muted-copy"></p>
+              <div class="task-metrics">
+                <span>已找到 <b id="xhs-total-links">0</b></span>
+                <span>已处理 <b id="xhs-processed">0</b></span>
+                <span>成功 <b id="xhs-success">0</b></span>
+                <span>失败 <b id="xhs-failed">0</b></span>
+              </div>
+              <p id="xhs-current-url" class="current-url"></p>
+            </section>
+
+            <section class="results-section">
+              <div class="results-heading">
+                <div>
+                  <p class="step-label">研究结果</p>
+                  <h2>已提取帖子</h2>
+                </div>
+                <span id="xhs-result-count">0 条</span>
+              </div>
+              <div id="xhs-results" class="result-grid">
+                <div class="empty-state">登录后输入主题开始搜索。已完成的任务会长期保存在本机。</div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="research-side">
+            <section class="panel">
+              <div class="panel-title">历史搜索</div>
+              <div id="xhs-task-list" class="task-list"><p class="muted-copy">暂无任务</p></div>
+            </section>
+            <section class="panel explain-card">
+              <div class="panel-title">提取方式</div>
+              <p><b>网页原文</b>：优先读取结构化数据和 DOM（文档对象模型）。</p>
+              <p><b>结构兜底</b>：页面结构变化时尝试 Accessibility Tree（无障碍结构树）。</p>
+              <p><b>图片文字</b>：图文正文不足时调用本机 OCR（光学字符识别）。</p>
+              <p><b>视频文字</b>：优先读取可见字幕；ASR（自动语音识别）缺少本地媒体时会明确提示。</p>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="settings-dialog" id="model-dialog" aria-labelledby="model-dialog-title">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">模型连接</p>
+          <h2 id="model-dialog-title">本机 OpenAI 代理接入</h2>
+        </div>
+        <button class="icon-btn" id="close-model-settings" type="button" aria-label="关闭模型设置">×</button>
+      </div>
+
+      <p class="dialog-copy">此设置用于已运行的本机 OpenAI-compatible 代理。代理内部如需登录或 OAuth，由代理自己处理；工作台不读取、保存或显示任何 Token。</p>
+
+      <form class="connection-form" id="model-form">
+        <div class="connection-help">
+          这是教培项目同样使用的本机接法：填写本机 API 根地址和模型，工作台固定调用 <code>/chat/completions</code>。DeepSeek 官方服务在独立的「DeepSeek 官方 API」入口设置。
+        </div>
+
+        <div class="proxy-fields">
+          <label>
+            本机代理 API 根地址
+            <input id="proxy-base-url" inputmode="url" placeholder="例如 http://127.0.0.1:端口/v1" autocomplete="off" />
+          </label>
+          <label>
+            模型标识
+            <input id="proxy-model" placeholder="填写该代理实际提供的模型名称" autocomplete="off" />
+          </label>
+          <p class="field-note">只接受 <code>localhost</code>、<code>127.0.0.1</code> 或 <code>::1</code> 的本机地址。API 根地址不要包含 <code>/chat/completions</code>。</p>
+        </div>
+
+        <div class="connection-actions">
+          <button type="submit">保存连接</button>
+          <button class="secondary-btn" id="test-proxy" type="button">测试本机代理</button>
+          <button class="danger-btn" id="disconnect-proxy" type="button">断开工作台连接</button>
+        </div>
+      </form>
+
+      <section class="connection-status" aria-live="polite">
+        <div><span>当前状态</span><b id="connection-status">检测中</b></div>
+        <div><span>当前模型</span><b id="connection-model">未设置</b></div>
+        <div><span>最近测试</span><b id="connection-test">尚未测试</b></div>
+        <p id="connection-note"></p>
+      </section>
+      <p class="result-message" id="connection-result" aria-live="polite"></p>
+    </dialog>
+    <script src="/app.js"></script>
+    <script src="/studio.js" type="module"></script>
+    <script src="/deepseek.js" type="module"></script>
+  </body>
+</html>
