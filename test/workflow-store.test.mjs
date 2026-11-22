@@ -189,3 +189,34 @@ test("a manual batch receipt reuses its frozen target and preserves the T+3 choi
   task = await update(store, task, "skip_publish", { targetId: remaining.id, reason: "此平台未发布" });
   assert.equal(task.publications[1].state, "skipped");
 });
+
+test("preview-only batches omit formal predictions and cannot be approved", async (t) => {
+  const { store } = await setup(t);
+  let task = await store.create({ title: "仅预览", format: "text", entryStage: "analytics" });
+  task = await update(store, task, "prepare_publish", {
+    previewOnly: true,
+    targets: [{ platform: "x", account: "待指定", title: "预览标题", content: "仅供预览" }]
+  });
+  assert.equal(task.status, "AWAITING_PUBLISH_CONFIRMATION");
+  assert.equal(task.batch.previewOnly, true);
+  assert.equal(task.batch.prediction, null);
+  await assert.rejects(update(store, task, "approve_publish", {
+    batchId: task.batch.id, confirmation: "仅预览不应授权发布"
+  }), { status: 409 });
+  const unchanged = await store.get(task.id);
+  assert.equal(unchanged.approval, null);
+  assert.equal(unchanged.publications.length, 0);
+});
+
+test("task record serialization de-duplicates metadata fields without removing notes", async (t) => {
+  const { root, store } = await setup(t);
+  let task = await store.create({ title: "状态字段", goal: "保留附注" });
+  let body = await readFile(task.recordPath, "utf8");
+  body = body.replace("- current_status：INTAKE", "- current_status：INTAKE\n- current_status：INTAKE\n\n- 人工附注：需保留");
+  await writeFile(task.recordPath, body);
+  task = await update(store, task, "save", { data: { notes: "保存一次" } });
+  body = await readFile(task.recordPath, "utf8");
+  assert.equal((body.match(/^- task_id：/gm) || []).length, 1);
+  assert.equal((body.match(/^- current_status：/gm) || []).length, 1);
+  assert.match(body, /- 人工附注：需保留/);
+});

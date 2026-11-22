@@ -142,6 +142,7 @@ test("browser preserves drafts, handles concurrent updates, searches all tasks a
 
   await t.test("text handoff and restored publishing targets produce a preview without publishing", async () => {
     await openOriginal();
+    await studio.getByLabel("已核对来源事实、归因限定、示例真实性和文稿逻辑", { exact: true }).check();
     await studio.getByRole("button", { name: "交给发布与数据", exact: true }).click();
     await studio.getByLabel("发布前预测与依据", { exact: true }).fill("验收假设：内容只生成发布预览，真实表现未知。");
     await studio.getByLabel("账号别名", { exact: true }).fill("隔离验收账号");

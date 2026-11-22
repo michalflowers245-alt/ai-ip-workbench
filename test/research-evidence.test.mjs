@@ -31,10 +31,11 @@ test("reads visible article paragraphs, decodes metadata, and keeps canonical li
   assert.equal(check.excerpt, "CMU is offering free access to select computing courses through CS Learn. More courses will follow.");
   assert.equal(check.excerptFrom, "main");
   assert.equal(check.excerptUrl, check.url);
-  assert.equal(check.passages.length, 3);
+  assert.equal(check.passages.length, 4);
   assert.equal(check.passages[0].text, check.excerpt);
   assert.deepEqual(check.passages[1], { text: "Additional courses will be announced at a later date.", source: "main:paragraph:2", url: check.url + "#schedule" });
   assert.match(check.passages[2].text, /精选课程/);
+  assert.match(check.passages[3].text, /Further material/);
   assert.equal(check.checkedAt, "2026-11-17T04:35:22.000Z");
 });
 
@@ -175,4 +176,42 @@ test("keeps an official release body when its metadata and visible release date 
     <p align="center"><em>The first paragraph highlights the office's view of the issue.</em></p>
     <p>The office filed a lawsuit and published a statement about its allegations.</p></div>`);
   assert.equal(ordinary.passages[0].source, "article:paragraph:1");
+});
+
+test("captures Clay's Riemann Hypothesis status as a distinct, attributable passage", async () => {
+  const page = "https://www.claymath.org/millennium/Riemann-Hypothesis/";
+  const check = await inspect(page, `<title>Riemann Hypothesis | Clay Mathematics Institute</title>
+    <main><p>The Riemann Hypothesis is one of the Millennium Prize Problems.</p>
+    <p class="meta-tag">Unsolved</p></main>`);
+  assert.equal(check.status, "read");
+  assert.equal(check.sourceKind, "official");
+  assert.equal(check.publisherStatus, "Unsolved");
+  assert.ok(check.passages.some((passage) => passage.source === "publisher:status" && passage.text === "Unsolved"));
+  assert.ok(check.passages.some((passage) => passage.url === page + "#publisher-status"));
+});
+
+test("reads primary Lean community and MIT verification records as official evidence", async () => {
+  const pages = new Map([
+    ["https://leanprover-community.github.io/blog/posts/riemann-hypothesis/", `<html><head><title>Lean verification of the Riemann Hypothesis</title></head>
+      <main><time datetime="2026-11-21T13:55:00Z">November 21, 2026</time>
+      <p>We have full confidence that Alpöge's proof of the Riemann Hypothesis is correct, and we congratulate him on this achievement.</p>
+      <ol><li>The statement matches the accepted Riemann Hypothesis in Mathlib.</li>
+      <li>Independent proof checkers validate the exported proof.</li></ol>
+      <p>The Lean and Mathlib communities certify the statement and proof after checking compilation, theorem statement, and independent kernels.</p></main></html>`],
+    ["https://math.mit.edu/~drew/grh/", `<html><head><title>Verification files for the Lean proof of the Riemann Hypothesis</title></head>
+      <main><p>Andrew Sutherland (MIT), checks run with Claude Code. Page last updated 2026-11-21 12:55 UTC.</p>
+      <p>The published Lean source compiles without errors, and independent proof checkers accept the full exported proof.</p>
+      <table><tr id="checker-result"><td>Independent kernel</td><td>accepted</td><td>Full exported proof replay finished 16:43:21 UTC.</td></tr></table></main></html>`]
+  ]);
+  const results = await verifyResearchSources([...pages.keys()], { fetcher: async (url) => htmlResponse(pages.get(url)), clock });
+  assert.deepEqual(results.map((entry) => entry.sourceKind), ["official", "official"]);
+  assert.deepEqual(results.map((entry) => entry.status), ["read", "read"]);
+  assert.match(results[0].passages[0].text, /full confidence/);
+  assert.equal(results[0].publishedAt, "2026-11-21T13:55:00.000Z");
+  assert.ok(results[0].passages.some((passage) => passage.source === "main:list-item:1" && /accepted Riemann Hypothesis/.test(passage.text)));
+  assert.ok(results[1].passages.some((passage) => passage.source === "main:table-row:1" && /Independent kernel accepted/.test(passage.text)));
+  assert.equal(results[1].updatedAt, undefined);
+  assert.equal(results[1].dateFields.updatedAt.from, "mit:page-update");
+  assert.equal(results[1].dateConflicts.updatedAt[0].value, "2026-11-21T12:55:00.000Z");
+  assert.equal(results[1].dateConflicts.updatedAt[1].value, "2026-11-21T16:43:21.000Z");
 });

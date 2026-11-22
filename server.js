@@ -310,6 +310,49 @@ function readChatText(data) {
 }
 
 async function requestOpenAiCompatible(connection, messages) {
+  const proxy = new URL(connection.proxyBaseUrl);
+  const localOllama = proxy.port === "11434" && ["127.0.0.1", "localhost", "::1"].includes(proxy.hostname)
+    && /(?:^|\/)v1\/?$/.test(proxy.pathname);
+  if (localOllama) {
+    const prompt = messages.compact && proxy.port === "11434" ? messages.compact : messages;
+    const endpoint = `${proxy.protocol}//${proxy.host}/api/chat`;
+    const payload = {
+      model: connection.model,
+      messages: [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user }
+      ],
+      stream: false,
+      keep_alive: "5m",
+      options: {
+        temperature: 0.4,
+        num_ctx: Number(process.env.WORKBENCH_OLLAMA_NUM_CTX) || 32768,
+        num_predict: messages.maxTokens || 1200
+      },
+      ...(messages.json ? { format: messages.schema || "json" } : {})
+    };
+    const startedAt = Date.now();
+    const response = await fetchLocal(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    }, Math.max(requestTimeoutMs, 240_000));
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      let reason = "";
+      try {
+        const result = JSON.parse(detail);
+        reason = typeof result.error === "string" ? result.error : result.error?.message;
+      } catch {}
+      const safeReason = typeof reason === "string" ? reason.replace(/https?:\/\/\S+/g, "[url]").replace(/[\r\n\t]+/g, " ").slice(0, 220) : "";
+      console.error(`本机 Ollama 原生 API 返回 HTTP ${response.status}${safeReason ? `：${safeReason}` : ""}`);
+      throw new HttpError(502, `本机 Ollama 原生 API 返回 HTTP ${response.status}${safeReason ? `：${safeReason}` : "，请检查模型与上下文配置"}`);
+    }
+    let result;
+    try { result = await response.json(); }
+    catch { throw new HttpError(502, "本机 Ollama 原生 API 未返回 JSON"); }
+    const text = result?.message?.content;
+    if (typeof text !== "string" || !text.trim()) throw new HttpError(502, "本机 Ollama 未返回可识别的正文");
+    return { text: text.trim(), latencyMs: Date.now() - startedAt };
+  }
   const endpoint = appendEndpoint(connection.proxyBaseUrl, "chat/completions");
   const compact = messages.compact && new URL(connection.proxyBaseUrl).port === "11434";
   const prompt = compact ? messages.compact : messages;
@@ -320,7 +363,7 @@ async function requestOpenAiCompatible(connection, messages) {
       { role: "system", content: prompt.system },
       { role: "user", content: prompt.user }
     ],
-    max_tokens: compact ? Math.min(messages.maxTokens || 1200, 1400) : messages.maxTokens || 1200,
+    max_tokens: compact ? Math.min(messages.maxTokens || 2700, 4700) : messages.maxTokens || 1200,
     ...(compact && messages.json ? { response_format: messages.schema
       ? { type: "json_schema", json_schema: { name: "content_workbench", schema: messages.schema } }
       : { type: "json_object" } } : {}),
@@ -333,7 +376,17 @@ async function requestOpenAiCompatible(connection, messages) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }, compact ? Math.max(requestTimeoutMs, 120_000) : requestTimeoutMs);
-  if (!response.ok) throw new HttpError(502, `本机 OpenAI 代理返回 HTTP ${response.status}，请检查授权、模型和协议`);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    let reason = "";
+    try {
+      const payload = JSON.parse(detail);
+      reason = typeof payload.error === "string" ? payload.error : payload.error?.message;
+    } catch {}
+    const safeReason = typeof reason === "string" ? reason.replace(/https?:\/\/\S+/g, "[url]").replace(/[\r\n\t]+/g, " ").slice(0, 220) : "";
+    console.error(`本机 OpenAI 代理返回 HTTP ${response.status}${safeReason ? `：${safeReason}` : ""}`);
+    throw new HttpError(502, `本机 OpenAI 代理返回 HTTP ${response.status}${safeReason ? `：${safeReason}` : "，请检查授权、模型和协议"}`);
+  }
   let data;
   try {
     data = await response.json();
@@ -416,20 +469,18 @@ async function workbenchModel(messages) {
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return text;
     } catch {}
   }
-  const rolePrompt = {
-    research: "写一段中文热点选题草稿，给一个角度。使用可引用的来源正文，保留原文的范围、日期和归因。榜单、评论和标题是线索。诉讼只按指控或程序表述。",
-    writing: "写一段约 45 秒、150 到 220 字的中文口播正文，给一个可以照做的例子。来源正文优先于上游草稿，保留原文范围和报道归因，诉讼只按指控或程序表述。未经核对的时效、数字和结论不要写入。",
-    analytics: "写一段简短的发布预测或实绩分析，依据输入材料来判断。"
-  }[messages.role];
   const plain = {
-    system: (rolePrompt || "用简体中文完成任务。") + "只输出纯文本正文。区别事实和判断，勿补造数据。",
+    system: `${messages.compact.system}\n如果无法返回完整 JSON，请按所需字段输出完整内容文本，并保留事实边界、来源归因、已加载 Skill 和质量要求。不得擅自缩短成固定秒数或字数。`,
     user: messages.compact.user
   };
-  const fallback = await requestOpenAiCompatible(connection, { ...plain, compact: plain, maxTokens: 900 });
+  const fallback = await requestOpenAiCompatible(connection, { ...plain, compact: plain, maxTokens: messages.maxTokens || 2700 });
   return JSON.stringify({ body: fallback.text, modelOutputMode: "plain_fallback" });
 }
 
-const projectRoot = path.resolve(__dirname, "..");
+// A personal workspace may keep its employee policies beside the app. A clean
+// public checkout instead uses the bundled, generic policies in the app dir.
+const parentWorkspace = path.resolve(__dirname, "..");
+const projectRoot = existsSync(path.join(parentWorkspace, "自媒体员工配置")) ? parentWorkspace : __dirname;
 const workbench = createWorkbench({
   projectRoot,
   dataDir,

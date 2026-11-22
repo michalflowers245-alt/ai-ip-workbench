@@ -8,6 +8,13 @@ const dataDir = path.resolve(process.env.WORKBENCH_DATA_DIR || path.join(appDir,
 const requestedUrl = `http://127.0.0.1:${process.env.PORT || 5177}`;
 const noOpen = process.argv.includes("--no-open");
 
+function runtimeEnvironment() {
+  const bypass = new Set([...(process.env.NO_PROXY || process.env.no_proxy || "").split(",").map((item) => item.trim()).filter(Boolean), "localhost", "127.0.0.1", "::1"]);
+  const noProxy = [...bypass].join(",");
+  return { ...process.env, NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY || "1", NO_PROXY: noProxy, no_proxy: noProxy,
+    PORT: process.env.PORT || "5177" };
+}
+
 async function ready(url) {
   try {
     const response = await fetch(url + "/api/workbench/capabilities", { signal: AbortSignal.timeout(1500) });
@@ -31,7 +38,7 @@ async function main() {
   const offset = (await stat(logPath).catch(() => ({ size: 0 }))).size;
   const log = await open(logPath, "a", 0o600);
   const child = spawn(process.execPath, [path.join(appDir, "server.js")], {
-    cwd: appDir, env: { ...process.env, PORT: process.env.PORT || "5177" }, detached: true,
+    cwd: appDir, env: runtimeEnvironment(), detached: true,
     stdio: ["ignore", log.fd, log.fd]
   });
   let launchError;

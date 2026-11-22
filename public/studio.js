@@ -631,7 +631,7 @@ function researchSources(data) {
   if (data.checkedSourceText !== undefined && data.sourceText !== data.checkedSourceText) {
     proof.append(el("p", "studio-muted", "来源备注已修改，下面保留上一次核对记录。"));
   }
-  const kinds = { official: "发布方", community: "社区讨论", catalog: "索引页", publisher: "媒体或出版方" };
+  const kinds = { official: "发布方", community: "社区讨论", catalog: "索引页", publisher: "媒体或出版方", personal_statement: "当事人原始声明", preprint: "学术预印本" };
   for (const source of sources) {
     const excerpt = source.status === "read" && source.excerpt;
     const row = el("article", "studio-source-row");
@@ -639,6 +639,7 @@ function researchSources(data) {
     row.append(link(source.excerptUrl || source.url, headline));
     const state = excerpt ? "已取得可定位文本" : { read: "旧记录仅核对了标题和简介", metadata: "仅取得标题或简介", unavailable: "暂未取得正文", manual: "待人工打开" }[source.status];
     row.append(el("small", "studio-muted", [state, kinds[source.sourceKind], source.publisher, source.message].filter(Boolean).join(" · ")));
+    if (source.publisherStatus) row.append(el("small", "studio-muted", "发布方状态标记：" + source.publisherStatus + "（按当前核对时页面标注）"));
     const cache = source.cache || {};
     const response = [
       Number.isInteger(source.httpStatus) && !source.message?.includes(`HTTP ${source.httpStatus}`) && `HTTP ${source.httpStatus}`,
@@ -646,6 +647,8 @@ function researchSources(data) {
       Number.isFinite(cache.ageSeconds) && `缓存响应年龄 ${cache.ageSeconds} 秒`
     ].filter(Boolean);
     if (response.length) row.append(el("small", "studio-muted", response.join(" · ")));
+    if (source.responseHash) row.append(el("small", "studio-muted", "原始页面响应 SHA-256 " + source.responseHash.slice(0, 20) + "…"));
+    if (source.snapshotPath) row.append(el("small", "studio-muted", "本地原始响应快照已保存：" + source.snapshotPath));
     const dates = [
       source.publishedAt && (source.sourceKind === "community" ? "讨论页日期 " : "页面标注发布 ") + sourceDate(source.publishedAt),
       source.updatedAt && "页面标注更新 " + sourceDate(source.updatedAt),
@@ -689,8 +692,12 @@ function researchSources(data) {
   }
   if (data.claims?.length) {
     const citations = el("details", "studio-new");
-    citations.append(el("summary", "", "模型引用对照"), el("p", "studio-muted", "原句已定位，结论与原句的对应关系仍待核对。"));
-    for (const item of data.claims) citations.append(textBlock(`${item.sourceId} · ${item.claim}\n${item.quote}`));
+    citations.append(el("summary", "", "主张与证据核对"), el("p", "studio-muted", "逐字匹配只确认引文在页面出现；每项事实仍需按原文范围复核。"));
+    for (const item of data.claims) {
+      const state = { pending: "待复核", supported: "原文直接支持", qualified: "需保留限定", excluded: "不采用" }[item.reviewStatus || "pending"];
+      citations.append(textBlock(`${item.claimId || "C?"} · ${state}\n${item.sourceId} · ${item.claim}\n${item.quote}${item.reviewReason ? `\n复核理由：${item.reviewReason}` : ""}${item.reviewer ? `\n复核人：${item.reviewer} · ${localDate(item.reviewedAt)}` : ""}`));
+    }
+    if (data.claimReview?.complete) citations.append(el("small", "studio-muted", "逐条复核完成 · " + (data.claimReview.reviewer || "复核记录")));
     proof.append(citations);
   }
   return proof;
@@ -704,10 +711,29 @@ function research(task, data) {
     out.push(line(...task.inputs.sources.map((source) => link(source.originalUrl || source.url || source, source.title || "发现线索 ↗"))));
   }
   const sources = researchSources(data);
+  const claimReview = data.claims?.length ? (() => {
+    const reviewPanel = panel("逐条复核模型提取的事实主张");
+    const entries = [];
+    for (const claim of data.claims) {
+      const row = el("article", "studio-source-row");
+      const state = field("结论", claim.reviewStatus || "pending", { choices: {
+        pending: "待复核", supported: "原文直接支持", qualified: "保留限定后使用", excluded: "不采用"
+      } });
+      const reason = field("判断理由（至少 8 字，说明原文支持到哪里）", claim.reviewReason || "", { type: "textarea" });
+      row.append(el("strong", "", `${claim.claimId || "主张"} · ${claim.claim}`), el("blockquote", "", claim.quote), state.wrap, reason.wrap);
+      entries.push({ claimId: claim.claimId, state, reason });
+      reviewPanel.append(row);
+    }
+    if (data.claimReview?.complete) reviewPanel.append(el("p", "studio-muted", `已完成 · ${data.claimReview.reviewer || "复核记录"} · ${localDate(data.claimReview.reviewedAt)}`));
+    reviewPanel.append(button("保存逐条复核并解锁文案交接", () => action("review_claims", {
+      reviews: entries.map(({ claimId, state, reason }) => ({ claimId, status: state.get(), reason: reason.get() }))
+    }), true));
+    return reviewPanel;
+  })() : null;
   const input = () => ({ sourceText: sourceText.get(), body: notes.get() });
   return panel("选题研究", ...out, sourceText.wrap,
     line(button("核对来源", () => action("check_sources", { input: input() }), true)),
-    ...(sources ? [sources] : []), notes.wrap,
+    ...(sources ? [sources] : []), ...(claimReview ? [claimReview] : []), notes.wrap,
     line(button("保存研究", () => action("save", { data: { body: notes.get(), sourceText: sourceText.get() } })),
       button("分析热点与竞品", () => action("generate", { input: input() }), true),
       button("研究并直接出稿", () => action("generate", { input: input(), autoDraft: true })),
@@ -717,6 +743,15 @@ function research(task, data) {
         await action("confirm_topic", { confirmation: "确认采用本页选题及写作角度" }, false);
         await action("handoff", { toStage: "writing", note: "用户采用选题" });
       })));
+}
+function skillTracePanel(data) {
+  const manifest = data?.skillTrace?.skills;
+  if (!Array.isArray(manifest) || !manifest.length) return null;
+  const card = panel("本步已加载 Skill");
+  card.append(el("small", "studio-muted", `执行时间 ${localDate(data.skillTrace.loadedAt)} · 注入岗位模型上下文`));
+  for (const skill of manifest) card.append(el("p", skill.status === "loaded" ? "studio-muted" : "studio-error",
+    `${skill.name} · ${skill.status === "loaded" ? "已加载" : "未找到"}${skill.digest ? ` · SHA-256 ${skill.digest.slice(0, 16)}` : ""}`));
+  return card;
 }
 function writing(task, data) {
   const previous = task.stages?.research?.data;
@@ -728,15 +763,21 @@ function writing(task, data) {
   const shots = field("拍摄清单与分镜", data.shots, { draftKey: "shots", type: "textarea" });
   const teleprompter = field("提词器", data.teleprompter, { draftKey: "teleprompter", type: "textarea" });
   const corrections = field("本轮写作要求", "", { draftKey: "corrections", placeholder: "补充案例、修正角度或调整时长" });
+  const reviewed = field("已核对来源事实、归因限定、示例真实性和文稿逻辑", data.manualReview?.status === "accepted_for_editing", { draftKey: "manualReview", type: "checkbox" });
   function draft() { return { script: script.get(), body: script.get(), hook: hook.get(), cover: cover.get(), shots: shots.get(), teleprompter: teleprompter.get() }; }
+  for (const input of [script.input, hook.input, cover.input, shots.input, teleprompter.input]) {
+    input.addEventListener("input", () => { reviewed.input.checked = false; });
+  }
   const incoming = previous?.body ? panel("已交接选题", textBlock(previous.body)) : el("span");
   return panel("文案编辑", incoming, corrections.wrap,
     line(button("生成稿件", () => action("generate", { input: { corrections: corrections.get(), previousDraft: script.get() } }), true)),
-    hook.wrap, cover.wrap, script.wrap, shots.wrap, teleprompter.wrap,
-    line(button("保存稿件", () => action("save", { data: draft() })),
+    hook.wrap, cover.wrap, script.wrap, shots.wrap, teleprompter.wrap, reviewed.wrap,
+    line(button("保存稿件", () => action("save", { data: { ...draft(), manualReview: { status: "needs_review", checks: [], reviewedAt: null } } })),
       button(task.format === "video" ? "交给剪辑" : "交给发布与数据", async () => {
         if (!script.get()) throw new Error("请填写或生成正文。");
-        await action("handoff", { data: draft(), toStage: task.format === "video" ? "editing" : "analytics", note: "交接当前稿件版本" });
+        if (!reviewed.get()) throw new Error("请先完成文稿复核，再交给下一工作台。");
+        const manualReview = { status: "accepted_for_editing", reviewedAt: new Date().toISOString(), reviewer: "user", checks: ["source_facts", "attribution_limits", "example_truth", "script_logic"] };
+        await action("handoff", { data: { ...draft(), manualReview }, toStage: task.format === "video" ? "editing" : "analytics", note: "已逐项核对来源事实、归因限定、示例真实性和文稿逻辑" });
       }, true)));
 }
 function uri(task, name) { return "/api/workbench/tasks/" + task.id + "/media/" + name; }
@@ -876,9 +917,12 @@ function analytics(task, data) {
   const coverPath = data.cover?.coverPath || editingData.cover?.coverPath || "";
   const filePath = editingData.videoPath || editingData.asset?.filePath || task.inputs?.sourcePath || "";
   const input = writingData.script || task.inputs?.text || "";
+  const previewOnly = field("仅保存预览，不建立正式发布预测", task.batch?.previewOnly ?? currentDraft?.values.previewOnly ?? data.previewOnly ?? false, { draftKey: "previewOnly", type: "checkbox" });
   const prediction = field("发布前预测与依据", data.body || task.batch?.prediction?.body || task.batch?.prediction || "", { draftKey: "prediction", type: "textarea",
     placeholder: "给出播放、互动、转粉、风险假设和验证窗口" });
-  const header = panel("发布材料与预测");
+  prediction.wrap.hidden = previewOnly.get();
+  previewOnly.input.onchange = () => { prediction.wrap.hidden = previewOnly.get(); };
+  const header = panel("发布材料与预览");
   if (coverPath || (filePath && editingData.asset)) {
     const assets = el("div", "studio-assets");
     if (filePath && editingData.asset) {
@@ -895,7 +939,7 @@ function analytics(task, data) {
     }
     header.append(assets);
   }
-  header.append(prediction.wrap, line(
+  header.append(previewOnly.wrap, prediction.wrap, line(
     button("生成预测与发布文案", () => action("generate", { input: { artifact: filePath, published: task.publications.some((item) => item.version === task.version && item.state === "published") } }), true)
   ));
   if (editingData.asset) header.append(button("准备真实画面封面", () => action("render_cover", { title: writingData.cover || task.title })));
@@ -951,12 +995,12 @@ function analytics(task, data) {
     header.append(panel("发布目标", targetArea,
       line(addPlatform,
         button("保存发布预览", () => action("prepare_publish", { targets: targetRows.map((item) => item.read()),
-          prediction: { body: prediction.get() } }), true))));
+          previewOnly: previewOnly.get(), prediction: previewOnly.get() ? undefined : { body: prediction.get() } }), true))));
   }
   const current = task.batch;
   if (current) {
     const preview = panel("当前发布批次", el("p", "studio-muted",
-      task.approval ? "授权已登记 · " + localDate(task.approval.at) : "等待核对并授权"),
+      current.previewOnly ? "仅预览 · 未建立正式预测 · 未发布" : task.approval ? "授权已登记 · " + localDate(task.approval.at) : "等待核对并授权"),
       textBlock(current.prediction?.body || ""));
     const readyTargets = [];
     for (const target of current.targets) {
@@ -965,16 +1009,16 @@ function analytics(task, data) {
         !(target.platform === "x" && (target.publishAt || target.cover));
       const card = el("div", "studio-pub");
       card.append(el("strong", "", (platformNames[target.platform] || target.platform) + " · " + target.account + " · " + target.title),
-        el("p", "studio-muted", (target.publishAt ? localDate(target.publishAt) : "立即") + " · 公开 · " + (supported ? "支持工具提交" : "手动发布登记")),
+        el("p", "studio-muted", current.previewOnly ? "仅预览 · 未安排发布时间 · 不会提交" : (target.publishAt ? localDate(target.publishAt) : "立即") + " · 公开 · " + (supported ? "支持工具提交" : "手动发布登记")),
         textBlock([target.file, target.cover, target.description, target.content].filter(Boolean).join("\n")));
-      if ((!publication || (publication.state === "failed" && publication.confirmedUnpublished)) && supported && task.approval) {
+      if (!current.previewOnly && (!publication || (publication.state === "failed" && publication.confirmedUnpublished)) && supported && task.approval) {
         readyTargets.push(target);
         card.append(button("提交此作品", async () => {
           if (!window.confirm("确认现在把该版本提交到 " + (platformNames[target.platform] || target.platform) + " 的账号 " + target.account + "？")) return;
           await action("publish_target", { targetId: target.id });
         }, true));
       }
-      if (!publication || ["failed", "pending"].includes(publication.state)) {
+      if (!current.previewOnly && (!publication || ["failed", "pending"].includes(publication.state))) {
         const manual = el("details", "studio-new");
         const url = field("作品链接", "", { type: "url" });
         const id = field("平台作品 ID", "");
@@ -985,13 +1029,13 @@ function analytics(task, data) {
           })));
         card.append(manual);
       }
-      if (!publication || publication.state === "failed") card.append(button("本批跳过该目标", () => {
+      if (!current.previewOnly && (!publication || publication.state === "failed")) card.append(button("本批跳过该目标", () => {
         if (!window.confirm("确认结束本目标在此批次的发布计划？")) return;
         return action("skip_publish", { targetId: target.id, reason: "用户结束此批次的该平台目标" });
       }));
       preview.append(card);
     }
-    if (!task.approval && !occupied) preview.append(button("确认预测与发布范围", () => {
+    if (!current.previewOnly && !task.approval && !occupied) preview.append(button("确认预测与发布范围", () => {
       if (!window.confirm("确认此预览内的作品版本、账号、平台和时间？")) return;
       return action("approve_publish", { batchId: current.id, confirmation: "用户确认页面显示的预测与完整发布范围" });
     }, true));
@@ -1106,6 +1150,8 @@ function taskDetail(task) {
   const prior = previousOutputs(task, role);
   if (prior) header.append(prior);
   header.append(content);
+  const skillTrace = skillTracePanel(data);
+  if (skillTrace) header.append(skillTrace);
   if (role !== "research" && !["PUBLISHED", "AWAITING_DATA", "RETRO_DONE", "ARCHIVED"].includes(task.status)) {
     const previous = { writing: "research", editing: "writing", analytics: task.format === "video" ? "editing" : "writing" }[role];
     header.append(button("新建修订并回到" + roles[previous].title, () => {
