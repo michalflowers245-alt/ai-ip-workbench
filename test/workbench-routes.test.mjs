@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { createWorkbench } from "../lib/workbench-routes.js";
 import { WorkflowStore } from "../lib/workflow-store.js";
+
+const exec = promisify(execFile);
 
 async function setup(t, modelResult = { body: "供人工审阅的测试草稿", needsInput: [] }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "workbench-routes-"));
@@ -44,7 +48,7 @@ async function setup(t, modelResult = { body: "供人工审阅的测试草稿", 
     assert.equal(result.status, 200);
     return result.task;
   }
-  return { store: new WorkflowStore({ projectRoot: root }), calls, raw, act };
+  return { root, store: new WorkflowStore({ projectRoot: root }), calls, raw, act };
 }
 
 const html = (body, metadata = "") => `<html><head><title>Official article</title>${metadata}</head><article><p>${body}</p></article></html>`;
@@ -107,6 +111,19 @@ test("preview-only analytics loads review guidance without the formal prediction
   assert.match(calls[0].compact.user, /true/);
 });
 
+test("editing import loads the employee-approved edit and cover skills", async (t) => {
+  const { root, store, act } = await setup(t);
+  const sourcePath = path.join(root, "skill-check.mp4");
+  await exec("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=beige:s=128x256:d=0.5", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", sourcePath]);
+  const task = await store.create({ title: "剪辑 Skill 接入", entryStage: "editing" });
+  const imported = await act(task, { action: "import_final", sourcePath, previewOnly: true });
+  assert.deepEqual(imported.stages.editing.data.skillTrace.skills.map((skill) => skill.name), [
+    "space-video-edit", "video-editor", "thumbnail-and-repurpose"
+  ]);
+  assert.equal(imported.stages.editing.data.asset.previewOnly, true);
+  assert.ok(imported.stages.editing.data.asset.reportPath);
+});
+
 test("writing cannot hand off a script before its four factual and editorial checks are recorded", async (t) => {
   const { store, act, raw } = await setup(t);
   let task = await store.create({ title: "待复核文案", entryStage: "writing" });
@@ -117,6 +134,28 @@ test("writing cannot hand off a script before its four factual and editorial che
   const handed = await act(task, { action: "handoff", toStage: "editing", data: { script: "AI写的口播稿", manualReview: task.stages.writing.data.manualReview } });
   assert.equal(handed.stage, "editing");
   assert.equal(handed.stages.writing.data.manualReview.status, "accepted_for_editing");
+});
+
+test("preview-only storyboard samples can reach analytics but cannot enter a formal publish batch", async (t) => {
+  const { root, store, act, raw } = await setup(t);
+  const note = "仅用于链路验收，没有真人原片、口播与正式剪辑，不可发布。";
+  const sourcePath = path.join(root, "storyboard-preview.mp4");
+  await writeFile(sourcePath, "sample frames encoded as video");
+  let task = await store.create({ title: "分镜预览样片", format: "video", entryStage: "editing",
+    inputs: { stageData: { previewOnly: true, previewNote: note,
+      asset: { previewOnly: true, previewNote: note, filePath: sourcePath, reportPath: path.join(root, "storyboard-qc.json") } } } });
+  task = await act(task, { action: "handoff", toStage: "analytics", note,
+    data: { verified: false, previewOnly: true, previewNote: note, videoPath: sourcePath } });
+  assert.equal(task.stage, "analytics");
+  assert.equal(task.stages.editing.data.verified, false);
+  assert.equal(task.stages.editing.data.previewOnly, true);
+  assert.equal(task.stages.editing.data.previewNote, note);
+  assert.equal(task.history.at(-1).handoff.requiresUserConfirmation, true);
+  const blocked = await raw(task, { action: "prepare_publish", previewOnly: false, targets: [
+    { platform: "douyin", account: "待确认账号", title: task.title, file: sourcePath }
+  ] });
+  assert.equal(blocked.status, 409);
+  assert.match(blocked.error, /只能保存预览/);
 });
 
 test("a short official status label can be cited exactly but still requires explicit review", async (t) => {

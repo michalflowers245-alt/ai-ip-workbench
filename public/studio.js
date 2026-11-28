@@ -279,7 +279,7 @@ function consumedDraftFields(name, payload, stage) {
   return ({ check_sources: ["sourceText", "body"], inspect_media: ["sourcePath"],
     transcribe: ["sourcePath", "cuts", "segments"], suggest_cuts: ["cuts"],
     prepare_media: ["sourcePath", "cuts", "aspectRatio", "segments"], export_media: ["segments", "captionPosition"],
-    import_final: ["sourcePath", "cuts", "segments", "aspectRatio"], render_cover: ["coverTitle"],
+    import_final: ["sourcePath", "cuts", "segments", "aspectRatio", "previewOnly"], render_cover: ["coverTitle"],
     prepare_publish: ["prediction", "targets"], complete_retro: ["retro"], draft_retro: ["retro"],
     collect_metrics: ["metrics." + payload.targetId], record_publish: ["receipt." + payload.targetId] })[name] || [];
 }
@@ -649,8 +649,10 @@ function researchSources(data) {
     if (response.length) row.append(el("small", "studio-muted", response.join(" · ")));
     if (source.responseHash) row.append(el("small", "studio-muted", "原始页面响应 SHA-256 " + source.responseHash.slice(0, 20) + "…"));
     if (source.snapshotPath) row.append(el("small", "studio-muted", "本地原始响应快照已保存：" + source.snapshotPath));
+    const publishedLabel = source.dateFields?.publishedAt?.from === "euronext:page-timestamp"
+      ? "转载页标注时间 " : source.sourceKind === "community" ? "讨论页日期 " : "页面标注发布 ";
     const dates = [
-      source.publishedAt && (source.sourceKind === "community" ? "讨论页日期 " : "页面标注发布 ") + sourceDate(source.publishedAt),
+      source.publishedAt && publishedLabel + sourceDate(source.publishedAt),
       source.updatedAt && "页面标注更新 " + sourceDate(source.updatedAt),
       source.checkedAt && "核对于 " + localDate(source.checkedAt)
     ].filter(Boolean);
@@ -744,10 +746,10 @@ function research(task, data) {
         await action("handoff", { toStage: "writing", note: "用户采用选题" });
       })));
 }
-function skillTracePanel(data) {
+function skillTracePanel(data, title = "本步已加载 Skill") {
   const manifest = data?.skillTrace?.skills;
   if (!Array.isArray(manifest) || !manifest.length) return null;
-  const card = panel("本步已加载 Skill");
+  const card = panel(title);
   card.append(el("small", "studio-muted", `执行时间 ${localDate(data.skillTrace.loadedAt)} · 注入岗位模型上下文`));
   for (const skill of manifest) card.append(el("p", skill.status === "loaded" ? "studio-muted" : "studio-error",
     `${skill.name} · ${skill.status === "loaded" ? "已加载" : "未找到"}${skill.digest ? ` · SHA-256 ${skill.digest.slice(0, 16)}` : ""}`));
@@ -793,6 +795,7 @@ function playback(task, name) {
 }
 function editing(task, data) {
   const source = field("本地原片或成片的完整路径", data.sourcePath || task.inputs?.sourcePath, { draftKey: "sourcePath", placeholder: "/Users/…/video.mp4" });
+  const previewSample = field("此素材仅为工作流分镜预览样片（非正式成片）", data.asset?.previewOnly ?? false, { draftKey: "previewOnly", type: "checkbox" });
   const aspectRatio = field("画幅", data.prepared?.media?.aspectRatio || "original", { draftKey: "aspectRatio", choices: { original: "原画幅", "9:16": "9:16 竖屏", "16:9": "16:9 横屏", "1:1": "1:1 方形" } });
   const cuts = field("删除区间（秒）", json(data.cuts || []), { draftKey: "cuts", type: "textarea", placeholder: '[{"start":4.2,"end":5.5,"reason":"口误"}]' });
   const segments = field("剪后字幕时间码及文字", json(data.prepared?.segments || []), { draftKey: "segments", type: "textarea" });
@@ -800,8 +803,10 @@ function editing(task, data) {
   const output = panel("原片与转写", source.wrap, line(
     button("检查原片", () => action("inspect_media", { sourcePath: source.get() })),
     button("转写并找删改候选", () => action("transcribe", { sourcePath: source.get() }), true),
-    button("导入已有成片", () => action("import_final", { sourcePath: source.get() }))
+    button("导入已有成片", () => action("import_final", { sourcePath: source.get(), previewOnly: previewSample.get(),
+      previewNote: previewSample.get() ? "仅用于四工作台链路验收；没有真人原片、口播与正式剪辑，不可发布。" : "" }))
   ));
+  output.append(previewSample.wrap);
   if (data.inspection) output.append(el("p", "studio-muted", (data.inspection.duration ?? "?") + " 秒 · " + data.inspection.width + " × " + data.inspection.height));
   if (task.stages.writing?.data?.script) {
     const script = el("details", "studio-new");
@@ -827,12 +832,18 @@ function editing(task, data) {
     const confirm = field("已播放开头、中段和结尾，核对口型、音轨和画面", data.verified, { type: "checkbox" });
     const coverTitle = field("封面标题", task.stages.writing?.data?.cover || task.title, { draftKey: "coverTitle" });
     const report = data.asset.reportPath ? el("p", "studio-muted", "质检报告 " + data.asset.reportPath) : el("span");
-    output.append(panel("成片质检", playback(task, "final"), report, coverTitle.wrap,
+    if (data.asset.previewOnly) {
+      confirm.wrap.hidden = true;
+      output.append(el("p", "studio-warning", data.asset.previewNote || "这是流程预览样片，不是正式成片。"));
+    }
+    output.append(panel(data.asset.previewOnly ? "分镜预览样片检查" : "成片质检", playback(task, "final"), report, coverTitle.wrap,
       ...(data.cover ? [Object.assign(el("img", "studio-cover"), { src: uri(task, "cover"), alt: "本地成片封面" })] : []),
-      confirm.wrap, line(button("从原片帧准备封面", () => action("render_cover", { title: coverTitle.get() })),
+      ...(data.asset.previewOnly ? [] : [confirm.wrap]), line(button("从原片帧准备封面", () => action("render_cover", { title: coverTitle.get() })),
         button("确认成片并交给数据台", async () => {
-          if (!confirm.get()) throw new Error("请先播放并核对成片。");
-          await action("handoff", { data: { verified: true, videoPath: data.videoPath }, toStage: "analytics", note: "已核对字幕、口型、音轨和画面" });
+          if (!data.asset.previewOnly && !confirm.get()) throw new Error("请先播放并核对成片。");
+          await action("handoff", { data: { verified: !data.asset.previewOnly, previewOnly: data.asset.previewOnly === true,
+            previewNote: data.asset.previewNote || "", videoPath: data.videoPath }, toStage: "analytics",
+            note: data.asset.previewOnly ? "仅交付分镜预览样片用于平台预览，不是正式成片，不可发布" : "已核对字幕、口型、音轨和画面" });
         }, true))));
   }
   return output;
@@ -917,20 +928,35 @@ function analytics(task, data) {
   const coverPath = data.cover?.coverPath || editingData.cover?.coverPath || "";
   const filePath = editingData.videoPath || editingData.asset?.filePath || task.inputs?.sourcePath || "";
   const input = writingData.script || task.inputs?.text || "";
-  const previewOnly = field("仅保存预览，不建立正式发布预测", task.batch?.previewOnly ?? currentDraft?.values.previewOnly ?? data.previewOnly ?? false, { draftKey: "previewOnly", type: "checkbox" });
+  const previewSampleOnly = editingData.previewOnly === true;
+  const header = panel("发布材料与预览");
+  const previewOnly = field("仅保存预览，不建立正式发布预测", task.batch?.previewOnly ?? currentDraft?.values.previewOnly ?? data.previewOnly ?? previewSampleOnly, { draftKey: "previewOnly", type: "checkbox" });
+  if (previewSampleOnly) {
+    previewOnly.input.checked = true;
+    previewOnly.input.disabled = true;
+    header.append(el("p", "studio-warning", editingData.previewNote || "本批素材是工作流分镜预览样片；只允许生成预览，正式剪辑后需新建正式发布版本。"));
+  }
   const prediction = field("发布前预测与依据", data.body || task.batch?.prediction?.body || task.batch?.prediction || "", { draftKey: "prediction", type: "textarea",
     placeholder: "给出播放、互动、转粉、风险假设和验证窗口" });
   prediction.wrap.hidden = previewOnly.get();
   previewOnly.input.onchange = () => { prediction.wrap.hidden = previewOnly.get(); };
-  const header = panel("发布材料与预览");
-  if (coverPath || (filePath && editingData.asset)) {
+  const coverVariants = Array.isArray(data.coverVariants) ? data.coverVariants : [];
+  if (coverPath || coverVariants.length || (filePath && editingData.asset)) {
     const assets = el("div", "studio-assets");
     if (filePath && editingData.asset) {
       const sample = el("figure", "studio-asset");
-      sample.append(playback(task, "final"), el("figcaption", "", "待发布成片"));
+      sample.append(playback(task, "final"), el("figcaption", "", previewSampleOnly ? "分镜预览样片 · 非正式成片" : "待发布成片"));
       assets.append(sample);
     }
-    if (coverPath) {
+    if (coverVariants.length) {
+      for (const variant of coverVariants) {
+        const sheet = el("figure", "studio-asset");
+        sheet.classList.add("studio-asset-cover");
+        sheet.append(Object.assign(el("img", "studio-cover"), { src: uri(task, variant.id === "A" ? "cover-a" : "cover-b"), alt: `封面候选 ${variant.id}` }),
+          el("figcaption", "", `候选 ${variant.id} · ${variant.direction}${variant.selected ? " · 当前预览" : ""}`));
+        assets.append(sheet);
+      }
+    } else if (coverPath) {
       const sheet = el("figure", "studio-asset");
       sheet.classList.add("studio-asset-cover");
       sheet.append(Object.assign(el("img", "studio-cover"), { src: uri(task, "cover"), alt: "本地封面预览" }),
@@ -940,9 +966,12 @@ function analytics(task, data) {
     header.append(assets);
   }
   header.append(previewOnly.wrap, prediction.wrap, line(
-    button("生成预测与发布文案", () => action("generate", { input: { artifact: filePath, published: task.publications.some((item) => item.version === task.version && item.state === "published") } }), true)
+    button(previewOnly.get() ? "生成平台文案" : "生成预测与发布文案", () => action("generate", { input: {
+      artifact: filePath, previewOnly: previewOnly.get(),
+      published: task.publications.some((item) => item.version === task.version && item.state === "published")
+    } }), true)
   ));
-  if (editingData.asset) header.append(button("准备真实画面封面", () => action("render_cover", { title: writingData.cover || task.title })));
+  if (editingData.asset && !previewSampleOnly) header.append(button("准备真实画面封面", () => action("render_cover", { title: writingData.cover || task.title })));
 
   const targetRows = [];
   const targetArea = el("div", "studio-pub-targets");
@@ -1008,9 +1037,13 @@ function analytics(task, data) {
       const supported = task.format === "video" && ["douyin", "xiaohongshu", "tencent", "x"].includes(target.platform) &&
         !(target.platform === "x" && (target.publishAt || target.cover));
       const card = el("div", "studio-pub");
+      const shortPath = (value) => String(value || "").split(/[\\/]/).filter(Boolean).at(-1) || "";
+      const previewLines = [target.file && `视频文件：${shortPath(target.file)}`, target.cover && `封面：${shortPath(target.cover)}`,
+        target.tags?.length && `标签：${target.tags.map((tag) => tag.startsWith("#") ? tag : "#" + tag).join(" ")}`,
+        target.description, target.content].filter(Boolean).join("\n");
       card.append(el("strong", "", (platformNames[target.platform] || target.platform) + " · " + target.account + " · " + target.title),
         el("p", "studio-muted", current.previewOnly ? "仅预览 · 未安排发布时间 · 不会提交" : (target.publishAt ? localDate(target.publishAt) : "立即") + " · 公开 · " + (supported ? "支持工具提交" : "手动发布登记")),
-        textBlock([target.file, target.cover, target.description, target.content].filter(Boolean).join("\n")));
+        textBlock(previewLines));
       if (!current.previewOnly && (!publication || (publication.state === "failed" && publication.confirmedUnpublished)) && supported && task.approval) {
         readyTargets.push(target);
         card.append(button("提交此作品", async () => {
@@ -1152,6 +1185,10 @@ function taskDetail(task) {
   header.append(content);
   const skillTrace = skillTracePanel(data);
   if (skillTrace) header.append(skillTrace);
+  if (role === "analytics" && data.coverSkillTrace) {
+    const coverSkillTrace = skillTracePanel({ skillTrace: data.coverSkillTrace }, "03 封面 Skill 使用记录");
+    if (coverSkillTrace) header.append(coverSkillTrace);
+  }
   if (role !== "research" && !["PUBLISHED", "AWAITING_DATA", "RETRO_DONE", "ARCHIVED"].includes(task.status)) {
     const previous = { writing: "research", editing: "writing", analytics: task.format === "video" ? "editing" : "writing" }[role];
     header.append(button("新建修订并回到" + roles[previous].title, () => {

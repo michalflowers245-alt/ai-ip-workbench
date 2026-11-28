@@ -89,6 +89,44 @@ test("records discussion text as community evidence with the exact public commen
   assert.equal(check.passages, undefined);
 });
 
+test("reads Reuters syndication and Euronews as publisher evidence rather than official company statements", async () => {
+  const reuters = await inspect("https://live.euronext.com/en/financial-news/sap-report", `<html><head>
+    <title>Software giant SAP weighs major job cuts as AI transforms sector, sources say</title>
+    </head><div class="timestamp mb-3 field__item"><time datetime="2026-11-27T14:26:11Z">Fri 27/11/2026 - 15:26</time></div>
+    <main><p>FRANKFURT, Nov 27 (Reuters) - German business software maker SAP is preparing to cut a sizeable number of jobs, two people familiar with the matter told Reuters.</p>
+    <p>Bloomberg News reported that SAP is considering cutting at least 10,000 jobs in an AI-driven restructuring, citing people familiar with the matter.</p></main></html>`);
+  assert.equal(reuters.status, "read");
+  assert.equal(reuters.sourceKind, "publisher");
+  assert.equal(reuters.publishedAt, "2026-11-27T14:26:11.000Z");
+  assert.equal(reuters.dateFields.publishedAt.from, "euronext:page-timestamp");
+  assert.match(reuters.excerpt, /two people familiar with the matter told Reuters/);
+  assert.match(reuters.passages[1].text, /Bloomberg News reported/);
+
+  const euronews = await inspect("https://www.euronews.com/business/2026/11/27/sap-report", `<html><head>
+    <title>SAP weighs job cuts amid AI shift, reports say</title>
+    <meta property="article:published_time" content="2026-11-27T10:37:00Z"></head>
+    <main><p>SAP told Euronews that the business environment in which we operate is changing rapidly through AI, and we are continuously reviewing how our organization and workforce need to evolve to remain successful.</p>
+    <p>The company said no decisions have been made regarding any further measures. We do not comment on speculation.</p></main></html>`);
+  assert.equal(euronews.status, "read");
+  assert.equal(euronews.sourceKind, "publisher");
+  assert.match(euronews.excerpt, /SAP told Euronews/);
+  assert.match(euronews.passages.map((item) => item.text).join(" "), /no decisions have been made/);
+
+  const unapproved = await inspect("https://unknown-news.example/story", "<title>Untrusted</title><main><p>Unknown domains remain outside the fetch allowlist.</p></main>");
+  assert.equal(unapproved.status, "manual");
+  assert.equal(unapproved.sourceKind, undefined);
+});
+
+test("preserves a caveat at the end of a long news paragraph", async () => {
+  const caveat = "The company said no decisions have been made regarding any further measures. We do not comment on speculation.";
+  const filler = "SAP said it continuously reviews how its organization and workforce need to evolve as the business environment changes through artificial intelligence. ".repeat(3);
+  const check = await inspect("https://www.euronews.com/business/2026/11/27/sap-response", `<title>SAP response</title>
+    <main><p>${filler}${caveat}</p></main>`);
+  assert.equal(check.status, "read");
+  assert.match(check.excerpt, /no decisions have been made regarding any further measures/);
+  assert.match(check.excerpt, /We do not comment on speculation/);
+});
+
 test("separates a metadata-only JavaScript shell or title-only page from blocked and failed pages", async () => {
   const page = "https://qwen.ai/blog?id=article";
   const shell = await inspect(page, `<head><title>Qwen</title><meta name='description' content='Qwen models'></head>
