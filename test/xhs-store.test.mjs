@@ -66,3 +66,19 @@ test("unfinished tasks are marked interrupted after a restart", async (t) => {
   t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
   assert.equal(store.getTask(task.id).status, "interrupted");
 });
+
+test("automation settings survive SQLite close and reopen", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "xhs-automation-restart-"));
+  const file = path.join(dir, "research.sqlite");
+  let store = new XhsStore(file);
+  store.updateAutomation({ enabled: true, keywords_json: JSON.stringify(["AI OPC", "大学生 AI"]), interval_hours: 12, target_count: 5, state: "scheduled", next_run_at: "2026-11-29T00:00:00.000Z" });
+  store.close();
+  store = new XhsStore(file);
+  t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
+  const saved = store.getAutomation();
+  assert.equal(saved.enabled, true);
+  assert.deepEqual(saved.keywords, ["AI OPC", "大学生 AI"]);
+  assert.equal(saved.interval_hours, 12);
+  assert.equal(saved.state, "scheduled");
+  assert.equal(saved.next_run_at, "2026-11-29T00:00:00.000Z");
+});

@@ -1,7 +1,7 @@
 const state = {
   employee: "", view: "studio", employees: {},
   db: { knowledge: [], feedback: [], conversations: {} }, modelConnection: null,
-  xhsConnection: null, xhsTasks: [], xhsDetail: null, activeTaskId: null, pollTimer: null
+  xhsConnection: null, xhsAutomation: null, xhsTasks: [], xhsDetail: null, activeTaskId: null, pollTimer: null, autoStatusTimer: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -115,13 +115,24 @@ function showView(view) {
     && $("rail-content").contains(document.activeElement);
   setRailOpen(false);
   state.view = view;
+  clearInterval(state.autoStatusTimer);
+  state.autoStatusTimer = null;
   $("employee-workspace").hidden = view !== "employees";
   $("studio-workspace").hidden = view !== "studio";
   $("xhs-workspace").hidden = view !== "xhs";
   $("open-xhs-research").classList.toggle("active", view === "xhs");
   $("open-legacy").classList.toggle("active", view === "employees");
   renderNav();
-  if (view === "xhs") refreshXhs().catch(showXhsError);
+  if (view === "xhs") {
+    refreshXhs().catch(showXhsError);
+    state.autoStatusTimer = setInterval(async () => {
+      try {
+        state.xhsAutomation = await api("/api/xhs/automation");
+        const editingSettings = $("xhs-automation-form").contains(document.activeElement);
+        renderXhsAutomation(!editingSettings);
+      } catch (error) { showXhsError(error); }
+    }, 15_000);
+  }
   if (view === "studio") window.dispatchEvent(new CustomEvent("studio-role", { detail: state.employee || "home" }));
   if (restoreMobileFocus) toggle.focus({ preventScroll: true });
 }
@@ -151,6 +162,27 @@ function renderXhsConnection() {
   setText("xhs-asr-capability", `ASR：${connection.asr?.available ? "可用" : "不可用"} · ${connection.asr?.message || "未检测"}`);
 }
 
+function renderXhsAutomation(syncForm = false) {
+  const automation = state.xhsAutomation;
+  if (!automation) return;
+  const labels = {
+    disabled: ["未开启", "warn"], scheduled: ["监控中", "good"], running: ["采集中", "good"],
+    waiting_for_login: ["等待登录", "warn"], paused_for_verification: ["等待人工验证", "bad"],
+    paused_for_platform_limit: ["平台限制，已暂停", "bad"], paused_for_connection: ["连接异常，已暂停", "bad"],
+    paused_for_error: ["异常，已暂停", "bad"]
+  };
+  const [label, tone] = labels[automation.state] || [automation.state || "未开启", "warn"];
+  $("xhs-auto-badge").textContent = label;
+  $("xhs-auto-badge").className = `connection-badge ${tone}`;
+  setText("xhs-auto-message", [automation.last_message, automation.last_run_at ? `最近运行：${formatDate(automation.last_run_at)}` : "尚未运行", automation.next_run_at ? `下次运行：${formatDate(automation.next_run_at)}` : ""].filter(Boolean).join(" · "));
+  if (syncForm) {
+    $("xhs-auto-keywords").value = (automation.keywords || []).join("\n");
+    $("xhs-auto-interval").value = String(automation.interval_hours || 12);
+    $("xhs-auto-target").value = automation.target_count || 5;
+  }
+  $("xhs-auto-pause").disabled = !automation.enabled;
+}
+
 function renderTaskList() {
   const list = $("xhs-task-list");
   list.replaceChildren();
@@ -158,7 +190,7 @@ function renderTaskList() {
   state.xhsTasks.forEach((task) => {
     const button = node("button", `task-item${task.id === state.activeTaskId ? " active" : ""}`);
     button.type = "button";
-    button.append(node("b", "", task.keyword), node("span", "", `${taskStatus[task.status] || task.status} · ${task.processed_count}/${task.total_links || task.target_count}`), node("small", "", formatDate(task.created_at)));
+    button.append(node("b", "", task.keyword), node("span", "", `${task.source === "automation" ? "自动监控" : "手动搜索"} · ${taskStatus[task.status] || task.status} · ${task.processed_count}/${task.total_links || task.target_count}`), node("small", "", formatDate(task.created_at)));
     button.onclick = () => selectXhsTask(task.id);
     list.appendChild(button);
   });
@@ -297,10 +329,10 @@ function showXhsError(error) {
 }
 
 async function refreshXhs() {
-  const [connection, tasksData] = await Promise.all([api("/api/xhs/connection"), api("/api/xhs/tasks?limit=30")]);
-  state.xhsConnection = connection; state.xhsTasks = tasksData.tasks || [];
+  const [connection, tasksData, automation] = await Promise.all([api("/api/xhs/connection"), api("/api/xhs/tasks?limit=30"), api("/api/xhs/automation")]);
+  state.xhsConnection = connection; state.xhsTasks = tasksData.tasks || []; state.xhsAutomation = automation;
   if (!state.activeTaskId && state.xhsTasks.length) state.activeTaskId = state.xhsTasks[0].id;
-  renderXhsConnection(); renderTaskList();
+  renderXhsConnection(); renderXhsAutomation(true); renderTaskList();
   if (state.activeTaskId) await selectXhsTask(state.activeTaskId, false); else renderXhsDetail();
 }
 
@@ -372,13 +404,30 @@ window.addEventListener("studio-navigate", (event) => {
 });
 async function xhsConnectionAction(buttonId, endpoint) {
   const button = $(buttonId); button.disabled = true;
-  try { state.xhsConnection = await api(endpoint, {}); renderXhsConnection(); }
+  try { state.xhsConnection = await api(endpoint, {}); renderXhsConnection(); state.xhsAutomation = await api("/api/xhs/automation"); renderXhsAutomation(true); }
   catch (error) { showXhsError(error); } finally { button.disabled = false; }
 }
 $("xhs-open-login").addEventListener("click", () => xhsConnectionAction("xhs-open-login", "/api/xhs/connection/open"));
 $("xhs-check-login").addEventListener("click", () => xhsConnectionAction("xhs-check-login", "/api/xhs/connection/check"));
 $("xhs-clear-login").addEventListener("click", async () => {
   if (window.confirm("只清除这个工作台的小红书专用登录目录，确定继续吗？")) await xhsConnectionAction("xhs-clear-login", "/api/xhs/connection/clear");
+});
+$("xhs-automation-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const button = event.submitter; button.disabled = true;
+  try {
+    state.xhsAutomation = await api("/api/xhs/automation", {
+      enabled: true, keywords: $("xhs-auto-keywords").value,
+      intervalHours: Number($("xhs-auto-interval").value), targetCount: Number($("xhs-auto-target").value)
+    });
+    renderXhsAutomation(true);
+  } catch (error) { showXhsError(error); } finally { button.disabled = false; }
+});
+$("xhs-auto-pause").addEventListener("click", async () => {
+  const button = $("xhs-auto-pause"); button.disabled = true;
+  try {
+    state.xhsAutomation = await api("/api/xhs/automation", { enabled: false });
+    renderXhsAutomation(true);
+  } catch (error) { showXhsError(error); } finally { button.disabled = !state.xhsAutomation?.enabled; }
 });
 $("xhs-search-form").addEventListener("submit", async (event) => {
   event.preventDefault(); const button = event.submitter; button.disabled = true;
