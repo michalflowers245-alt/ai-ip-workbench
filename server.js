@@ -578,20 +578,37 @@ async function route(req, res) {
   }
   if (url.pathname === "/api/xhs/connection/open" && req.method === "POST") {
     try {
-      return send(res, 200, await xhsBrowser.openLogin());
+      const connection = await xhsBrowser.openLogin();
+      await xhsResearch.refreshAutomationAfterLogin(connection);
+      return send(res, 200, connection);
     } catch (error) {
       throw new HttpError(502, error.message || "无法打开小红书专用浏览器");
     }
   }
   if (url.pathname === "/api/xhs/connection/check" && req.method === "POST") {
     try {
-      return send(res, 200, await xhsBrowser.checkLogin());
+      const connection = await xhsBrowser.checkLogin();
+      await xhsResearch.refreshAutomationAfterLogin(connection);
+      return send(res, 200, connection);
     } catch (error) {
       throw new HttpError(502, error.message || "无法检查小红书登录状态");
     }
   }
   if (url.pathname === "/api/xhs/connection/clear" && req.method === "POST") {
-    return send(res, 200, await xhsBrowser.clearProfile());
+    const connection = await xhsBrowser.clearProfile();
+    await xhsResearch.refreshAutomationAfterLogin(connection);
+    return send(res, 200, connection);
+  }
+  if (url.pathname === "/api/xhs/automation" && req.method === "GET") {
+    return send(res, 200, xhsResearch.automationStatus());
+  }
+  if (url.pathname === "/api/xhs/automation" && req.method === "POST") {
+    const body = await bodyJson(req);
+    try {
+      return send(res, 200, xhsResearch.configureAutomation(body));
+    } catch (error) {
+      throw new HttpError(400, error.message || "无法保存自动监控设置");
+    }
   }
   if (url.pathname === "/api/xhs/tasks" && req.method === "GET") {
     return send(res, 200, { tasks: xhsStore.listTasks({
@@ -719,6 +736,7 @@ server.on("listening", () => {
   if (address && typeof address === "object") port = address.port;
   console.log(`自媒体工作台运行于 ${localOrigin()}`);
   workbench.start();
+  xhsResearch.startScheduler();
 });
 
 server.listen(port, host);
@@ -728,6 +746,7 @@ async function shutdown(signal) {
   if (closing) return;
   closing = true;
   workbench.stop();
+  await xhsResearch.close().catch(() => {});
   console.log(`收到 ${signal}，正在关闭浏览器和数据库。`);
   await xhsBrowser.close().catch(() => {});
   try { xhsStore.close(); } catch { /* already closed */ }

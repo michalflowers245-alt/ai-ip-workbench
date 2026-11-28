@@ -143,6 +143,42 @@
               <p class="field-note">每次最多 20 条，单任务按顺序逐条打开，有限滚动和有限重试，避免给平台造成高频请求。</p>
             </section>
 
+            <section class="panel automation-card">
+              <div class="section-heading">
+                <div>
+                  <p class="step-label">定时采集</p>
+                  <h2>自动监控关键词</h2>
+                </div>
+                <span class="connection-badge" id="xhs-auto-badge">未开启</span>
+              </div>
+              <form id="xhs-automation-form" class="automation-form">
+                <label>
+                  关注词（每行一个，最多 5 个）
+                  <textarea id="xhs-auto-keywords" rows="3" maxlength="900" placeholder="大学生 AI&#10;AI 职业&#10;AI 学习工具"></textarea>
+                </label>
+                <div class="automation-options">
+                  <label>
+                    采集频率
+                    <select id="xhs-auto-interval">
+                    <option value="12" selected>每 12 小时</option>
+                      <option value="6">每 6 小时</option>
+                      <option value="24">每天</option>
+                    </select>
+                  </label>
+                  <label>
+                    每词目标数
+                    <input id="xhs-auto-target" type="number" min="1" max="20" value="5" />
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button type="submit">保存并开启监控</button>
+                  <button class="secondary-btn" id="xhs-auto-pause" type="button">暂停监控</button>
+                </div>
+              </form>
+              <p id="xhs-auto-message" class="muted-copy">保存后会先检查专用浏览器登录状态。每轮按关键词顺序采集并保留原帖链接、可见时间、互动数和采集时间。</p>
+              <p class="field-note">监控的是定位相关关键词的可见搜索结果，不是官方全站热榜。工作台服务运行时执行；关机、休眠或服务退出期间不会采集。遇到登录失效、验证或平台限制会暂停。</p>
+            </section>
+
             <section class="panel progress-card" id="xhs-progress-card" hidden>
               <div class="section-heading">
                 <div>

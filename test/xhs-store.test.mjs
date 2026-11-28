@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { XhsStore } from "../lib/xhs-store.js";
 
 async function withStore(t) {
@@ -65,4 +66,41 @@ test("unfinished tasks are marked interrupted after a restart", async (t) => {
   store = new XhsStore(file);
   t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
   assert.equal(store.getTask(task.id).status, "interrupted");
+});
+
+test("automation settings survive SQLite close and reopen", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "xhs-automation-restart-"));
+  const file = path.join(dir, "research.sqlite");
+  let store = new XhsStore(file);
+  store.updateAutomation({ enabled: true, keywords_json: JSON.stringify(["AI OPC", "大学生 AI"]), interval_hours: 12, target_count: 5, state: "scheduled", next_run_at: "2026-11-29T00:00:00.000Z" });
+  store.close();
+  store = new XhsStore(file);
+  t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
+  const saved = store.getAutomation();
+  assert.equal(saved.enabled, true);
+  assert.deepEqual(saved.keywords, ["AI OPC", "大学生 AI"]);
+  assert.equal(saved.interval_hours, 12);
+  assert.equal(saved.state, "scheduled");
+  assert.equal(saved.next_run_at, "2026-11-29T00:00:00.000Z");
+});
+
+test("legacy task databases gain the automation source column without losing rows", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "xhs-automation-migration-"));
+  const file = path.join(dir, "research.sqlite");
+  const legacy = new DatabaseSync(file);
+  legacy.exec(`CREATE TABLE xhs_search_tasks (
+    id TEXT PRIMARY KEY, keyword TEXT NOT NULL, target_count INTEGER NOT NULL, status TEXT NOT NULL,
+    stage TEXT NOT NULL, progress_message TEXT NOT NULL DEFAULT '', total_links INTEGER NOT NULL DEFAULT 0,
+    processed_count INTEGER NOT NULL DEFAULT 0, success_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0, current_url TEXT NOT NULL DEFAULT '', stop_requested INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL
+  )`);
+  legacy.prepare(`INSERT INTO xhs_search_tasks(id,keyword,target_count,status,stage,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`)
+    .run("old_task", "AI 大学生", 5, "completed", "complete", new Date().toISOString(), new Date().toISOString());
+  legacy.close();
+
+  const store = new XhsStore(file);
+  t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
+  assert.equal(store.getTask("old_task").source, "manual");
+  assert.equal(store.createTask("AI 职业", 5, "automation").source, "automation");
 });
