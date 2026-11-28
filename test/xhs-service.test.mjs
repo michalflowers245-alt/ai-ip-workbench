@@ -9,8 +9,9 @@ import { XhsResearchService, XhsStageError } from "../lib/xhs-research.js";
 async function setup(t, browser, cleaner = null) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "xhs-service-test-"));
   const store = new XhsStore(path.join(dir, "research.sqlite"));
-  t.after(async () => { store.close(); await rm(dir, { recursive: true, force: true }); });
-  return { store, service: new XhsResearchService({ store, browser: { capability: () => ({ ocr: {}, asr: {} }), ...browser }, cleaner }) };
+  const service = new XhsResearchService({ store, browser: { capability: () => ({ ocr: {}, asr: {} }), connectionStatus: () => ({ status: "logged_in" }), checkLogin: async () => ({ status: "logged_in" }), ...browser }, cleaner });
+  t.after(async () => { await service.close(); store.close(); await rm(dir, { recursive: true, force: true }); });
+  return { store, service };
 }
 
 function post(url, status = "success") {
@@ -116,4 +117,50 @@ test("search input is validated and target count is capped", async (t) => {
   assert.throws(() => service.start("a", 1), /至少需要 2 个字/);
   const task = service.start("合格主题", 999);
   assert.equal(task.target_count, 20);
+});
+
+test("automation settings wait for a verified login and then collect monitored keywords sequentially", async (t) => {
+  let loginStatus = "not_logged_in";
+  const searched = [];
+  const { store, service } = await setup(t, {
+    connectionStatus: () => ({ status: loginStatus }),
+    checkLogin: async () => ({ status: loginStatus }),
+    collectLinks: async (keyword) => { searched.push(keyword); return [{ url: `https://www.xiaohongshu.com/explore/${encodeURIComponent(keyword)}` }]; },
+    extractPost: async (_task, url) => post(url)
+  });
+  const waiting = service.configureAutomation({ enabled: true, keywords: "AI 大学生\nAI 求职", intervalHours: 6, targetCount: 1 });
+  assert.equal(waiting.state, "waiting_for_login");
+  assert.equal(waiting.next_run_at, null);
+  await service.tickAutomation();
+  assert.deepEqual(searched, []);
+
+  loginStatus = "logged_in";
+  await service.refreshAutomationAfterLogin({ status: "logged_in" });
+  for (let attempt = 0; attempt < 100 && service.schedulerBusy; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+  const finished = store.getAutomation();
+  assert.deepEqual(searched, ["AI 大学生", "AI 求职"]);
+  assert.equal(finished.state, "scheduled");
+  assert.equal(finished.last_status, "completed");
+  assert.equal(store.listTasks({ limit: 10 }).length, 2);
+  assert.deepEqual(store.listTasks({ limit: 10 }).map((task) => task.source), ["automation", "automation"]);
+  assert.ok(Date.parse(finished.next_run_at) > Date.now());
+});
+
+test("automation pauses on a verification gate and never retries itself", async (t) => {
+  let checks = 0;
+  let collectCalls = 0;
+  const { store, service } = await setup(t, {
+    connectionStatus: () => ({ status: "not_logged_in" }),
+    checkLogin: async () => { checks += 1; return { status: "needs_verification" }; },
+    collectLinks: async () => { collectCalls += 1; return []; }
+  });
+  service.configureAutomation({ enabled: true, keywords: "热点验证" });
+  store.updateAutomation({ next_run_at: new Date(Date.now() - 1000).toISOString() });
+  const paused = await service.tickAutomation();
+  assert.equal(paused.state, "paused_for_verification");
+  assert.equal(paused.next_run_at, null);
+  assert.equal(checks, 1);
+  assert.equal(collectCalls, 0);
+  await service.tickAutomation();
+  assert.equal(checks, 1);
 });
